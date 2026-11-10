@@ -1,6 +1,6 @@
 // Service Worker:アプリのファイルをスマホに保存し、電波がなくても開けるようにする係
 // ファイルを更新して公開するときは、CACHE の番号を1つ上げる(v1 → v2)
-const CACHE = 'vault-v2';
+const CACHE = 'vault-v3';
 const FILES = [
   './',
   './index.html',

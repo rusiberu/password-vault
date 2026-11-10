@@ -123,8 +123,9 @@ async function decryptEntries(k, v) {
 // 一覧を暗号化して保存する
 async function save() {
   const enc = await encryptEntries(key, entries);
-  vault = { ...vault, ...enc };
-  await dbPut('vault', vault);
+  const next = { ...vault, ...enc };
+  await dbPut('vault', next);
+  vault = next; // 保存に成功してから差し替える
 }
 
 // ===================================================
@@ -139,7 +140,7 @@ let toastTimer = null;
 // copy: true のときはコピー用(アイコン+30秒で縮むバー付き)
 function toast(text, copy = false) {
   $('toast-text').textContent = text;
-  $('toast-sub').textContent = copy ? '30秒後に消去' : '';
+  $('toast-sub').textContent = copy ? '30秒後か金庫に戻ると消去' : '';
   $('toast-icon').hidden = !copy;
   const bar = $('toast-bar');
   bar.hidden = !copy;
@@ -205,10 +206,18 @@ $('setup-btn').addEventListener('click', async () => {
   msg.textContent = '準備中…';
   $('setup-btn').disabled = true;
   const salt = crypto.getRandomValues(new Uint8Array(16));
-  key = await deriveKey(pw1, salt, ITERATIONS);
-  vault = { version: 1, salt: toBase64(salt), iterations: ITERATIONS };
-  entries = [];
-  await save();
+  try {
+    key = await deriveKey(pw1, salt, ITERATIONS);
+    vault = { version: 1, salt: toBase64(salt), iterations: ITERATIONS };
+    entries = [];
+    await save();
+  } catch (e) {
+    key = null;
+    vault = null;
+    msg.textContent = '保存できませんでした';
+    $('setup-btn').disabled = false;
+    return;
+  }
 
   $('setup-pw1').value = '';
   $('setup-pw2').value = '';
@@ -369,8 +378,18 @@ $('detail-edit').addEventListener('click', () => openEdit(currentId));
 $('delete-btn').addEventListener('click', async () => {
   const e = entries.find((x) => x.id === currentId);
   if (!confirm(`「${e.site}」を削除しますか?`)) return;
+  const backup = entries;
   entries = entries.filter((x) => x.id !== currentId);
-  await save();
+  $('delete-btn').disabled = true; // 処理中の二度押しを防ぐ
+  try {
+    await save();
+  } catch (err) {
+    entries = backup;
+    toast('保存できませんでした(削除されていません)');
+    return;
+  } finally {
+    $('delete-btn').disabled = false;
+  }
   toast('削除しました');
   openList();
 });
@@ -405,14 +424,29 @@ async function saveEntry() {
   };
   if (!data.site) { $('edit-msg').textContent = 'サイト名を入れてください'; return; }
 
+  // 連打で二重登録しないよう、処理中は両方の保存ボタンを押せなくする
+  $('save-btn').disabled = true;
+  $('save-btn-top').disabled = true;
+  const backup = structuredClone(entries); // 失敗したときに元へ戻す用
   let id = editingId;
-  if (id) {
-    Object.assign(entries.find((x) => x.id === id), data);
-  } else {
-    id = crypto.randomUUID();
-    entries.push({ id, ...data });
+  try {
+    if (id) {
+      Object.assign(entries.find((x) => x.id === id), data);
+    } else {
+      id = crypto.randomUUID();
+      entries.push({ id, ...data });
+    }
+    await save();
+  } catch (e) {
+    entries = backup;
+    $('edit-msg').textContent = '保存できませんでした';
+    toast('保存できませんでした');
+    return;
+  } finally {
+    $('save-btn').disabled = false;
+    $('save-btn-top').disabled = false;
   }
-  await save();
+  // 保存できたあとの画面の切り替え(ここでエラーが出ても「保存失敗」とは扱わない)
   clearForm();
   editingId = null;
   toast('保存しました');

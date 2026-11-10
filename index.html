@@ -31,15 +31,14 @@
 
     <label class="label" for="setup-pw1">マスターパスワード</label>
     <div class="field">
-      <input id="setup-pw1" type="password" autocomplete="off" spellcheck="false">
-      <button type="button" class="peek" data-for="setup-pw1">表示</button>
+      <input id="setup-pw1" type="password" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     </div>
     <div class="seg" id="setup-seg"><i></i><i></i><i></i><i></i></div>
     <div class="hint"><span>12文字以上</span><span id="setup-count">0 / 12</span></div>
 
     <label class="label" for="setup-pw2">もう一度入力</label>
     <div class="field">
-      <input id="setup-pw2" type="password" placeholder="確認のため再入力" autocomplete="off" spellcheck="false">
+      <input id="setup-pw2" type="password" placeholder="確認のため再入力" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     </div>
 
     <p id="setup-msg" class="msg"></p>
@@ -55,8 +54,7 @@
     <h1 class="big">パスワード金庫</h1>
     <p class="sub">マスターパスワードを入力してください</p>
     <div class="field lock-field">
-      <input id="lock-pw" type="password" aria-label="マスターパスワード" autocomplete="off" spellcheck="false">
-      <button type="button" class="peek" data-for="lock-pw">表示</button>
+      <input id="lock-pw" type="password" aria-label="マスターパスワード" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     </div>
     <p id="lock-msg" class="msg"></p>
     <button id="unlock-btn" class="btn"><i data-icon="lock"></i>開ける</button>
