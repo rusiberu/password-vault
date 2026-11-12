@@ -1,6 +1,6 @@
 // Service Worker:アプリのファイルをスマホに保存し、電波がなくても開けるようにする係
 // ファイルを更新して公開するときは、CACHE の番号を1つ上げる(v1 → v2)
-const CACHE = 'vault-v3';
+const CACHE = 'vault-v4';
 const FILES = [
   './',
   './index.html',
@@ -19,7 +19,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith('vault-') && k !== CACHE) /* 同じ住所のほかのアプリのキャッシュは消さない */.map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
