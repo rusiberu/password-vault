@@ -18,6 +18,7 @@ let entries = [];     // 復号した一覧 [{ id, site, uid, pw, memo }]
 let currentId = null; // 詳細で見ている項目のid
 let editingId = null; // 編集中の項目のid(新規追加ならnull)
 let pwShown = false;  // 詳細でパスワードを表示中か
+let pendingRestore = null; // 復元ファイルの中身。正しいパスワードで開けるまで今の金庫と入れ替えない
 
 const $ = (id) => document.getElementById(id);
 
@@ -234,13 +235,28 @@ $('setup-btn').addEventListener('click', async () => {
 async function unlock() {
   const pw = $('lock-pw').value;
   const msg = $('lock-msg');
-  if (!pw) return;
+  if (!pw || $('unlock-btn').disabled) return; // Enter連打で二重に走らないように
 
   msg.textContent = '確認中…';
   $('unlock-btn').disabled = true;
+  const target = pendingRestore || vault; // 復元中なら、復元ファイルの方で試す
   try {
-    const k = await deriveKey(pw, fromBase64(vault.salt), vault.iterations);
-    entries = await decryptEntries(k, vault); // 鍵が違うとここで失敗する
+    const k = await deriveKey(pw, fromBase64(target.salt), target.iterations);
+    entries = await decryptEntries(k, target); // 鍵が違うとここで失敗する
+    if (pendingRestore) {
+      // 開けたので、ここで初めて入れ替える。前の金庫は vault-prev に退避しておく
+      try {
+        if (vault) await dbPut('vault-prev', vault);
+        await dbPut('vault', pendingRestore);
+      } catch (err) {
+        entries = [];
+        msg.textContent = '復元できませんでした(今の金庫はそのままです)';
+        return;
+      }
+      vault = pendingRestore;
+      pendingRestore = null;
+      toast('復元しました');
+    }
     key = k;
     $('lock-pw').value = '';
     msg.textContent = '';
@@ -248,7 +264,9 @@ async function unlock() {
     await requestPersist();
     openList();
   } catch (e) {
-    msg.textContent = 'マスターパスワードが違います';
+    msg.textContent = pendingRestore
+      ? 'バックアップのマスターパスワードが違います(今の金庫はそのままです)'
+      : 'マスターパスワードが違います';
   } finally {
     $('unlock-btn').disabled = false;
   }
@@ -278,6 +296,7 @@ $('lock-btn').addEventListener('click', lock);
 // ③ 一覧・検索
 // ===================================================
 function openList() {
+  if (!key) { show(vault ? 'screen-lock' : 'screen-setup'); return; } // 保存中にロックされたとき
   currentId = null;
   pwShown = false;
   show('screen-list');
@@ -558,13 +577,13 @@ $('restore-file').addEventListener('change', async (ev) => {
     && data.iterations >= 100000;
   if (!ok) { alert('パスワード金庫のバックアップファイルではありません'); return; }
 
-  if (vault && !confirm('今のデータはバックアップの内容で上書きされます。よろしいですか?')) return;
+  if (vault && !confirm('バックアップのマスターパスワードで開けたら、今のデータと入れ替えます。よろしいですか?')) return;
 
-  vault = { version: 1, salt: data.salt, iterations: data.iterations, iv: data.iv, data: data.data };
-  await dbPut('vault', vault);
+  // まだ保存しない。ロック画面でパスワードが合ったときに入れ替える(unlock の中)
+  lock();
+  pendingRestore = { version: 1, salt: data.salt, iterations: data.iterations, iv: data.iv, data: data.data };
   show('screen-lock');
-  $('lock-msg').textContent = '';
-  toast('復元しました。バックアップ時のマスターパスワードで開けてください');
+  $('lock-msg').textContent = 'バックアップ時のマスターパスワードを入れてください(やめるときはアプリを開き直す)';
 });
 
 // ===================================================
