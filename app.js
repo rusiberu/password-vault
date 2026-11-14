@@ -403,6 +403,7 @@ $('delete-btn').addEventListener('click', async () => {
   try {
     await save();
   } catch (err) {
+    if (!key) return; // 途中で自動ロックされた → 中身をメモリに戻さず静かに抜ける
     entries = backup;
     toast('保存できませんでした(削除されていません)');
     return;
@@ -457,6 +458,7 @@ async function saveEntry() {
     }
     await save();
   } catch (e) {
+    if (!key) return; // 途中で自動ロックされた → 中身をメモリに戻さず静かに抜ける
     entries = backup;
     $('edit-msg').textContent = '保存できませんでした';
     toast('保存できませんでした');
@@ -466,6 +468,7 @@ async function saveEntry() {
     $('save-btn-top').disabled = false;
   }
   // 保存できたあとの画面の切り替え(ここでエラーが出ても「保存失敗」とは扱わない)
+  if (!key) return; // 保存中に自動ロックされた → ロック画面のまま
   clearForm();
   editingId = null;
   toast('保存しました');
@@ -530,14 +533,17 @@ function resetIdleTimer() {
   document.addEventListener(type, resetIdleTimer, { passive: true, capture: true });
 });
 
+// アプリに戻ってきた時、30秒が過ぎていれば消し残しを消す
+// (スマホでは focus が来ないことがあるので、visibilitychange からも呼ぶ)
+function clearIfExpired() {
+  if (clipPending && Date.now() >= clipDeadline) setTimeout(clearClipboard, 300);
+}
+
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) lock();
+  else clearIfExpired();
 });
-
-// アプリに戻ってきた時、30秒が過ぎていれば消し残しを消す
-window.addEventListener('focus', () => {
-  if (clipPending && Date.now() >= clipDeadline) setTimeout(clearClipboard, 300);
-});
+window.addEventListener('focus', clearIfExpired);
 
 // ===================================================
 // バックアップ(暗号化したまま書き出す / 読み込む)
@@ -547,7 +553,8 @@ $('export-btn').addEventListener('click', () => {
   const blob = new Blob([text], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const today = new Date().toISOString().slice(0, 10);
+  const d = new Date(); // 端末の時刻(日本時間)で 2026-11-14 の形にする
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   a.href = url;
   a.download = `password-vault-${today}.json`;
   a.click();
@@ -574,7 +581,8 @@ $('restore-file').addEventListener('change', async (ev) => {
   const ok = data && data.app === 'password-vault'
     && typeof data.salt === 'string' && typeof data.iv === 'string'
     && typeof data.data === 'string' && Number.isInteger(data.iterations)
-    && data.iterations >= 100000;
+    && data.iterations >= 100000
+    && data.iterations <= ITERATIONS * 10; // 大きすぎる数は、計算が終わらず固まるので断る
   if (!ok) { alert('パスワード金庫のバックアップファイルではありません'); return; }
 
   if (vault && !confirm('バックアップのマスターパスワードで開けたら、今のデータと入れ替えます。よろしいですか?')) return;
